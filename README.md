@@ -1,1 +1,0 @@
-# teleport-generator-react-native

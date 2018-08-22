@@ -51,6 +51,7 @@ export default class RNComponentGenerator extends ComponentGenerator {
   }
 
   public computeDependencies(content: any, isPage: boolean): any {
+    // tslint:disable-next-line:no-console
     const dependencies = {}
 
     const { type, children, props } = content
@@ -123,6 +124,11 @@ export default class RNComponentGenerator extends ComponentGenerator {
         })
       }
     }
+
+    if (!dependencies['react-native']) dependencies['react-native'] = []
+
+    const defaultStyleSheet = { type: 'StyleSheet', defaultImport: true }
+    if (dependencies['react-native'].indexOf(defaultStyleSheet) < 0) dependencies['react-native'].push(defaultStyleSheet)
 
     return dependencies
   }

@@ -1,3 +1,5 @@
+import { ComponentGeneratorOptions } from '../types'
+
 function parseForProps(content: any, isStyleObject?: boolean) {
   if (!content) return
 
@@ -26,7 +28,7 @@ function parseForProps(content: any, isStyleObject?: boolean) {
   }
 }
 
-export default function jsx(name: string, childrenJSX?: string, styleNames?: string[], isRoot?: boolean, styles?: string, props?: any): string {
+export default function jsx(name: string, childrenJSX?: string, styleNames?: string[], props?: any, options?: ComponentGeneratorOptions): string {
   let styleNamesString = ''
   if (styleNames && Array.isArray(styleNames) && styleNames.length > 0) {
     styleNamesString = styleNames.length > 1 ? `style={[${styleNames.map((styleName) => `styles.${styleName}`).join(', ')}]}` : `style={styles.${styleNames}}`
@@ -42,13 +44,6 @@ export default function jsx(name: string, childrenJSX?: string, styleNames?: str
   }
 
   const propsString = propsArray.length ? ' ' + propsArray.join(' ') : ''
-
-  if (isRoot) {
-    return `
-      <${name} ${styleNamesString} ${propsString}>
-        ${childrenJSX}
-      </${name}>`
-  }
 
   if (childrenJSX && childrenJSX.length > 0) {
     return `

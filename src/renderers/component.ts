@@ -1,8 +1,9 @@
 import styleTransformers from '@teleporthq/teleport-lib-js/dist/transformers/styles'
 const { jsstocss } = styleTransformers
 import transform from 'css-to-react-native-transform'
+import { ComponentGeneratorOptions } from '../types'
 
-const renderDependency = (libraryName, types) => {
+const renderDependency = (libraryName, types, options: ComponentGeneratorOptions) => {
   // there can be only one default import;
   // if multiple, the last one will be used;
   // @todo: discuss how to handle the case where multiple default imports are present
@@ -12,19 +13,16 @@ const renderDependency = (libraryName, types) => {
     types.map((type) => {
       // if the type is a string
       if (typeof type === 'string') {
-        // and it is from components
-        if (libraryName.indexOf('../components') === 0 || libraryName.indexOf('./') === 0) {
-          // treat it as a default import
-          defaultType = type
-        } else {
-          // otherwise add it to the deconstruction imports
+        if (deconstructedTypes.indexOf(type) < 0) {
           deconstructedTypes.push(type)
         }
       } else {
         if (type.defaultImport) {
           defaultType = type.type
         } else {
-          deconstructedTypes.push(type.type)
+          if (deconstructedTypes.indexOf(type.type) < 0) {
+            deconstructedTypes.push(type.type)
+          }
         }
       }
     })
@@ -39,8 +37,8 @@ const renderDependency = (libraryName, types) => {
   return `import ${importArray.join(', ')} from '${libraryName}'`
 }
 
-export default function component(name: string, jsx: string, dependencies: any = {}, props, styles): any {
-  const dependenciesArray = Object.keys(dependencies).map((libraryName) => renderDependency(libraryName, dependencies[libraryName]))
+export default function component(name: string, jsx: string, dependencies: any = {}, props, styles, options: ComponentGeneratorOptions): any {
+  const dependenciesArray = Object.keys(dependencies).map((libraryName) => renderDependency(libraryName, dependencies[libraryName], options))
 
   let propsString = ''
   if (props && props.length > 0) {

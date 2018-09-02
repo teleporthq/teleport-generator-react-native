@@ -1,4 +1,6 @@
-export default function packageRenderer(project: any): any {
+import { ComponentGeneratorOptions } from '../types'
+
+export default function packageRenderer(project: any, options: ComponentGeneratorOptions): any {
   const pkg = {
     author: project.userSlug || 'Unknown',
     dependencies: {

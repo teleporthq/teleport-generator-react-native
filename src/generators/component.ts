@@ -1,9 +1,51 @@
 import union from 'lodash/union'
 
-import { ComponentGenerator, Generator, FileSet } from '@teleporthq/teleport-lib-js'
+import { ComponentGenerator, FileSet } from '@teleporthq/teleport-lib-js'
+import { ComponentGeneratorOptions } from '../types'
 import TeleportGeneratorRN from '../index'
 import JSXrenderer from '../renderers/jsx'
 import COMPONENTrenderer from '../renderers/component'
+
+/**
+ * Cleans path from leading and tailing "." and "/" characters
+ * @param pathString
+ */
+function cleanPath(pathString) {
+  return pathString
+    .replace(/^\.\./, '')
+    .replace(/^\./, '')
+    .replace(/^\//, '')
+    .replace(/\/$/, '')
+}
+
+/**
+ * Given a source directory and a target filename, return the relative
+ * file path from source to target.
+ * @param source {String} directory path to start from for traversal
+ * @param target {String} directory path and filename to seek from source
+ * @return Relative path (e.g. "../../style.css") as {String}
+ */
+function getRelativePath(source, target) {
+  const sep = '/'
+  const targetArr = target.split(sep)
+  const sourceArr = source.split(sep)
+  const filename = targetArr.pop()
+  const targetPath = targetArr.join(sep)
+  let relativePath = ''
+
+  while (targetPath.indexOf(sourceArr.join(sep)) === -1) {
+    sourceArr.pop()
+    relativePath += '..' + sep
+  }
+
+  const relPathArr = targetArr.slice(sourceArr.length)
+
+  if (relPathArr.length) {
+    relativePath += relPathArr.join(sep) + sep
+  }
+
+  return relativePath + filename
+}
 
 function findNextIndexedKeyInObject(object, key) {
   if (!object[key]) return key
@@ -14,11 +56,19 @@ function findNextIndexedKeyInObject(object, key) {
   return key + '_' + i
 }
 
+const defaultOption = {
+  assetsPath: './static',
+  assetsUrl: '/static',
+  componentsPath: './components',
+  isPage: false,
+  pagesPath: './pages',
+}
+
 export default class RNComponentGenerator extends ComponentGenerator {
   public generator: TeleportGeneratorRN
 
   constructor(generator: TeleportGeneratorRN) {
-    super(generator as Generator)
+    super(generator)
   }
 
   public processStyles(componentContent: any, styles: any): any {
@@ -50,7 +100,7 @@ export default class RNComponentGenerator extends ComponentGenerator {
     return { styles, content }
   }
 
-  public computeDependencies(content: any, isPage: boolean): any {
+  public computeDependencies(content: any, options?: ComponentGeneratorOptions): any {
     // tslint:disable-next-line:no-console
     const dependencies = {}
 
@@ -62,14 +112,27 @@ export default class RNComponentGenerator extends ComponentGenerator {
 
     if (type) {
       if (source === 'components') {
-        // manage the case of component being a page
+        const { isPage, pagesPath, componentsPath } = options || defaultOption
+
+        const cleanedPages = cleanPath(pagesPath || './pages')
+        const cleanedComponents = cleanPath(componentsPath || './components')
+
+        const relativePagesToComponentsPath = getRelativePath(cleanedPages, cleanedComponents)
+
+        const componentsRelativePath = isPage ? relativePagesToComponentsPath : '.'
+
         const componentDependencies = {
-          [`${isPage ? '../components/' : './'}${type}`]: [type],
+          [`${componentsRelativePath}/${type}`]: [
+            {
+              defaultImport: true,
+              type,
+            },
+          ],
         }
 
         if (props && props.children && props.children.length > 0 && typeof props.children !== 'string') {
           const childrenDependenciesArray = props.children.map((child) => {
-            return this.computeDependencies(child, isPage)
+            return this.computeDependencies(child, options)
           })
 
           if (childrenDependenciesArray.length) {
@@ -113,7 +176,7 @@ export default class RNComponentGenerator extends ComponentGenerator {
 
     // if there are childrens, get their deps and merge them with the current ones
     if (children && children.length > 0 && typeof children !== 'string') {
-      const childrenDependenciesArray = children.map((child) => this.computeDependencies(child, isPage))
+      const childrenDependenciesArray = children.map((child) => this.computeDependencies(child, options))
       if (childrenDependenciesArray.length) {
         childrenDependenciesArray.forEach((childrenDependency) => {
           Object.keys(childrenDependency).forEach((childrenDependencyLibrary) => {
@@ -133,7 +196,7 @@ export default class RNComponentGenerator extends ComponentGenerator {
     return dependencies
   }
 
-  public renderComponentJSX(content: any, isRoot: boolean = false, styles?: any): any {
+  public renderComponentJSX(content: any, options?: ComponentGeneratorOptions): any {
     const { type, styleName, source, ...props } = content
     // retrieve the target type from the lib
     let mapping: any = null
@@ -167,7 +230,7 @@ export default class RNComponentGenerator extends ComponentGenerator {
           childrenJSX = children.replace(/</g, '&lt;').replace(/>/g, '&gt;')
         }
       } else {
-        childrenJSX = children.map((child) => this.renderComponentJSX(child))
+        childrenJSX = children.map((child) => this.renderComponentJSX(child, options))
       }
     }
 
@@ -180,7 +243,7 @@ export default class RNComponentGenerator extends ComponentGenerator {
     }
 
     if (mappedProps.children && Array.isArray(mappedProps.children)) {
-      childrenJSX = mappedProps.children.map((child) => this.renderComponentJSX(child))
+      childrenJSX = mappedProps.children.map((child) => this.renderComponentJSX(child, options))
       delete mappedProps.children
     }
 
@@ -188,28 +251,27 @@ export default class RNComponentGenerator extends ComponentGenerator {
       childrenJSX = childrenJSX.join('')
     }
 
-    return JSXrenderer(mappedType, childrenJSX, styleName, isRoot, mappedProps)
+    return JSXrenderer(mappedType, childrenJSX, styleName, mappedProps, options)
   }
 
-  public generate(component: any, options: any = {}): FileSet {
-    const { isPage } = options
+  public generate(component: any, options?: ComponentGeneratorOptions): FileSet {
     const { name } = component
-
     let { content } = component
-    const dependencies = this.computeDependencies(content, isPage)
+
+    const dependencies = this.computeDependencies(content, options)
 
     const stylingResults = this.processStyles(content, {})
 
     const styles = stylingResults.styles
     content = stylingResults.content
 
-    const jsx = this.renderComponentJSX(content, true, styles)
+    const jsx = this.renderComponentJSX(content, options)
 
     const props = component.editableProps ? Object.keys(component.editableProps) : null
 
     const result = new FileSet()
 
-    result.addFile(`${component.name}.js`, COMPONENTrenderer(name, jsx, dependencies, props, styles))
+    result.addFile(`${component.name}.js`, COMPONENTrenderer(name, jsx, dependencies, props, styles, options))
 
     return result
   }
